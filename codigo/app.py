@@ -3,24 +3,39 @@ import sys
 import math
 import time
 import random
+import subprocess
 from datetime import datetime
-
-try:
-    import pygame
-except ImportError:
-    print("Erro: A biblioteca 'pygame' não está instalada.")
-    print("Abra o terminal e digite: pip install pygame")
-    sys.exit()
-
-ARQUIVO_USUARIOS = "usuarios.txt"
-
+from flask import Flask, render_template, request
 
 # ==========================================
-# MÓDULO 1: AUTENTICAÇÃO (TERMINAL + TXT)
+# SITUAÇÃO DE APRENDIZAGEM (SA)
+# Projeto: Streaming Horror 3D (Web + Pygame)
 # ==========================================
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+RAIZ_PROJETOS = os.path.abspath(os.path.join(BASE_DIR, "..", ".."))
+
+# Vasculha TODAS as pastas e subpastas dentro de Projetos até achar o index.html
+PASTA_WEB = BASE_DIR
+for raiz, pastas, arquivos in os.walk(RAIZ_PROJETOS):
+    for arq in arquivos:
+        if arq.lower() == "index.html":
+            PASTA_WEB = raiz
+            break
+    if PASTA_WEB != BASE_DIR:
+        break
+
+print(">>> PASTA ENCONTRADA:", PASTA_WEB)
+ARQUIVO_USUARIOS = os.path.join(BASE_DIR, "usuarios.txt")
+app = Flask(__name__, template_folder=PASTA_WEB, static_folder=PASTA_WEB, static_url_path="")
+
+ARQUIVO_USUARIOS = os.path.join(BASE_DIR, "usuarios.txt")
+
+# Diz ao Flask para usar exatamente a PASTA_WEB como pasta de HTML e CSS
+app = Flask(__name__, template_folder=PASTA_WEB, static_folder=PASTA_WEB, static_url_path="")
+
 
 def carregar_usuarios():
-    """Lê o arquivo TXT e retorna um dicionário {email: senha}."""
     usuarios = {}
     if not os.path.exists(ARQUIVO_USUARIOS):
         return usuarios
@@ -33,50 +48,57 @@ def carregar_usuarios():
 
 
 def salvar_usuario(email, senha):
-    """Salva novo usuário no arquivo TXT."""
     with open(ARQUIVO_USUARIOS, "a", encoding="utf-8") as f:
         f.write(f"{email};{senha}\n")
 
 
-def sistema_login_terminal():
-    """Fluxo inicial de login/cadastro antes de abrir a janela 3D."""
-    os.system("cls" if os.name == "nt" else "clear")
-    usuarios = carregar_usuarios()
-    print("=== STREAMING HORROR 3D (LOGIN) ===\n")
+@app.route("/", methods=["GET", "POST"])
+def pagina_inicial():
+    mensagem = None
+    tipo_msg = ""
+    canal = None
 
-    while True:
-        resp = input("Você já tem um e-mail cadastrado? (s/n): ").strip().lower()
-        if resp == "s":
-            if not usuarios:
-                print("Nenhum usuário cadastrado ainda. Crie uma conta agora:")
-                resp = "n"
+    if request.method == "POST":
+        email = request.form.get("email", "").strip().lower()
+        senha = request.form.get("senha", "").strip()
+        acao = request.form.get("acao")
+        usuarios = carregar_usuarios()
+
+        if acao == "login":
+            if email in usuarios and usuarios[email] == senha:
+                canal = email.split("@")[0]
             else:
-                email = input("E-mail: ").strip().lower()
-                if email not in usuarios:
-                    print("E-mail não encontrado! Tente novamente ou digite 'n' para cadastrar.")
-                    continue
-                senha = input("Senha: ").strip()
-                if usuarios[email] == senha:
-                    print(f"\nBem-vindo(a), {email}! Abrindo o quarto 3D...")
-                    time.sleep(1)
-                    return email.split("@")[0]
-                else:
-                    print("Senha incorreta!")
-        if resp == "n":
-            while True:
-                email = input("Novo e-mail: ").strip().lower()
-                if "@" in email and "." in email and email not in usuarios:
-                    break
-                print("E-mail inválido ou já existente.")
-            while True:
-                senha = input("Nova senha (mínimo 4 dígitos): ").strip()
-                if len(senha) >= 4:
-                    break
-                print("Senha muito curta.")
-            salvar_usuario(email, senha)
-            print(f"\nConta criada! Abrindo o quarto 3D para {email}...")
-            time.sleep(1)
-            return email.split("@")[0]
+                mensagem = "E-mail ou senha incorretos!"
+                tipo_msg = "erro"
+
+        elif acao == "cadastro":
+            if "@" not in email or "." not in email:
+                mensagem = "Digite um e-mail válido."
+                tipo_msg = "erro"
+            elif email in usuarios:
+                mensagem = "Este e-mail já está cadastrado!"
+                tipo_msg = "erro"
+            elif len(senha) < 4:
+                mensagem = "A senha deve ter no mínimo 4 dígitos."
+                tipo_msg = "erro"
+            else:
+                salvar_usuario(email, senha)
+                mensagem = "Conta criada com sucesso! Agora clique em Entrar."
+                tipo_msg = "sucesso"
+
+    return render_template("index.html", mensagem=mensagem, tipo_msg=tipo_msg, canal=canal)
+
+
+@app.route("/jogar", methods=["POST"])
+def iniciar_jogo():
+    canal = request.form.get("canal", "Streamer")
+    subprocess.Popen([sys.executable, __file__, "--jogar", canal])
+    return render_template(
+        "index.html",
+        mensagem="Janela 3D aberta! Confira a barra de tarefas se ela abrir atrás do navegador.",
+        tipo_msg="sucesso",
+        canal=canal
+    )
 
 
 # ==========================================
@@ -111,18 +133,20 @@ MAPA_QUARTO = [
 
 class JogoStreaming3D:
     def __init__(self, nome_canal):
-        pygame.init()
-        self.tela = pygame.display.set_mode((LARGURA, ALTURA))
-        pygame.display.set_caption(f"Live Horror 3D - Canal: {nome_canal}")
-        self.clock = pygame.time.Clock()
+        import pygame
+        self.pg = pygame
+        self.pg.init()
+        self.tela = self.pg.display.set_mode((LARGURA, ALTURA))
+        self.pg.display.set_caption(f"Live Horror 3D - Canal: {nome_canal}")
+        self.clock = self.pg.time.Clock()
 
         # Fontes
-        self.fonte_chat = pygame.font.SysFont("Consolas", 14)
-        self.fonte_pequena = pygame.font.SysFont("Consolas", 16)
-        self.fonte_hud = pygame.font.SysFont("Consolas", 18, bold=True)
-        self.fonte_aviso = pygame.font.SysFont("Consolas", 22, bold=True)
-        self.fonte_grande = pygame.font.SysFont("Consolas", 30, bold=True)
-        self.fonte_gigante = pygame.font.SysFont("Consolas", 48, bold=True)
+        self.fonte_chat = self.pg.font.SysFont("Consolas", 14)
+        self.fonte_pequena = self.pg.font.SysFont("Consolas", 16)
+        self.fonte_hud = self.pg.font.SysFont("Consolas", 18, bold=True)
+        self.fonte_aviso = self.pg.font.SysFont("Consolas", 22, bold=True)
+        self.fonte_grande = self.pg.font.SysFont("Consolas", 30, bold=True)
+        self.fonte_gigante = self.pg.font.SysFont("Consolas", 48, bold=True)
 
         # Posição inicial do jogador
         self.px = 4.0
@@ -221,94 +245,93 @@ class JogoStreaming3D:
     # ==========================================
 
     def criar_sprite_mesa_pc(self, ligado=True):
-        surf = pygame.Surface((260, 260), pygame.SRCALPHA)
-        pygame.draw.rect(surf, (45, 45, 52), (30, 145, 14, 115))
-        pygame.draw.rect(surf, (45, 45, 52), (216, 145, 14, 115))
-        pygame.draw.rect(surf, (115, 72, 42), (18, 132, 224, 16), border_radius=3)
-        pygame.draw.rect(surf, (80, 48, 25), (18, 132, 224, 16), 2, border_radius=3)
+        surf = self.pg.Surface((260, 260), self.pg.SRCALPHA)
+        self.pg.draw.rect(surf, (45, 45, 52), (30, 145, 14, 115))
+        self.pg.draw.rect(surf, (45, 45, 52), (216, 145, 14, 115))
+        self.pg.draw.rect(surf, (115, 72, 42), (18, 132, 224, 16), border_radius=3)
+        self.pg.draw.rect(surf, (80, 48, 25), (18, 132, 224, 16), 2, border_radius=3)
 
-        pygame.draw.rect(surf, (25, 28, 35), (185, 62, 42, 70), border_radius=3)
+        self.pg.draw.rect(surf, (25, 28, 35), (185, 62, 42, 70), border_radius=3)
         if ligado:
-            pygame.draw.rect(surf, (0, 220, 255), (190, 68, 4, 58))
+            self.pg.draw.rect(surf, (0, 220, 255), (190, 68, 4, 58))
 
-        pygame.draw.rect(surf, (35, 35, 40), (105, 126, 40, 6))
-        pygame.draw.rect(surf, (35, 35, 40), (121, 108, 8, 18))
+        self.pg.draw.rect(surf, (35, 35, 40), (105, 126, 40, 6))
+        self.pg.draw.rect(surf, (35, 35, 40), (121, 108, 8, 18))
 
-        pygame.draw.rect(surf, (20, 22, 28), (68, 44, 114, 68), border_radius=4)
+        self.pg.draw.rect(surf, (20, 22, 28), (68, 44, 114, 68), border_radius=4)
         if ligado:
-            pygame.draw.rect(surf, (25, 110, 175), (73, 49, 104, 58))
-            pygame.draw.rect(surf, (15, 20, 30), (77, 53, 62, 36))
-            pygame.draw.circle(surf, (230, 190, 150), (108, 68), 8)
-            pygame.draw.rect(surf, (255, 50, 50), (155, 53, 18, 8))
+            self.pg.draw.rect(surf, (25, 110, 175), (73, 49, 104, 58))
+            self.pg.draw.rect(surf, (15, 20, 30), (77, 53, 62, 36))
+            self.pg.draw.circle(surf, (230, 190, 150), (108, 68), 8)
+            self.pg.draw.rect(surf, (255, 50, 50), (155, 53, 18, 8))
         else:
-            pygame.draw.rect(surf, (8, 9, 12), (73, 49, 104, 58))
+            self.pg.draw.rect(surf, (8, 9, 12), (73, 49, 104, 58))
 
-        pygame.draw.rect(surf, (15, 15, 15), (117, 38, 16, 6))
+        self.pg.draw.rect(surf, (15, 15, 15), (117, 38, 16, 6))
         if ligado:
-            pygame.draw.circle(surf, (0, 255, 120), (125, 41), 2)
+            self.pg.draw.circle(surf, (0, 255, 120), (125, 41), 2)
 
-        pygame.draw.rect(surf, (30, 32, 38), (85, 127, 65, 5))
+        self.pg.draw.rect(surf, (30, 32, 38), (85, 127, 65, 5))
         if ligado:
-            pygame.draw.rect(surf, (0, 200, 255), (87, 128, 61, 2))
-        pygame.draw.rect(surf, (35, 35, 40), (158, 127, 12, 5))
+            self.pg.draw.rect(surf, (0, 200, 255), (87, 128, 61, 2))
+        self.pg.draw.rect(surf, (35, 35, 40), (158, 127, 12, 5))
         return surf
 
     def criar_sprite_cadeira(self):
-        surf = pygame.Surface((180, 220), pygame.SRCALPHA)
-        pygame.draw.line(surf, (40, 40, 45), (50, 212), (130, 212), 5)
-        pygame.draw.circle(surf, (25, 25, 28), (50, 214), 5)
-        pygame.draw.circle(surf, (25, 25, 28), (90, 215), 5)
-        pygame.draw.circle(surf, (25, 25, 28), (130, 214), 5)
-        pygame.draw.rect(surf, (55, 55, 60), (85, 175, 10, 37))
-        pygame.draw.rect(surf, (30, 32, 38), (52, 162, 76, 14), border_radius=4)
-        pygame.draw.rect(surf, (45, 45, 50), (46, 138, 8, 28))
-        pygame.draw.rect(surf, (45, 45, 50), (126, 138, 8, 28))
-        pygame.draw.polygon(surf, (28, 30, 36), [(58, 162), (122, 162), (114, 72), (66, 72)])
-        pygame.draw.polygon(surf, (140, 35, 45), [(66, 155), (74, 155), (72, 80), (68, 80)])
-        pygame.draw.polygon(surf, (140, 35, 45), [(106, 155), (114, 155), (112, 80), (108, 80)])
-        pygame.draw.rect(surf, (160, 40, 50), (76, 82, 28, 14), border_radius=4)
+        surf = self.pg.Surface((180, 220), self.pg.SRCALPHA)
+        self.pg.draw.line(surf, (40, 40, 45), (50, 212), (130, 212), 5)
+        self.pg.draw.circle(surf, (25, 25, 28), (50, 214), 5)
+        self.pg.draw.circle(surf, (25, 25, 28), (90, 215), 5)
+        self.pg.draw.circle(surf, (25, 25, 28), (130, 214), 5)
+        self.pg.draw.rect(surf, (55, 55, 60), (85, 175, 10, 37))
+        self.pg.draw.rect(surf, (30, 32, 38), (52, 162, 76, 14), border_radius=4)
+        self.pg.draw.rect(surf, (45, 45, 50), (46, 138, 8, 28))
+        self.pg.draw.rect(surf, (45, 45, 50), (126, 138, 8, 28))
+        self.pg.draw.polygon(surf, (28, 30, 36), [(58, 162), (122, 162), (114, 72), (66, 72)])
+        self.pg.draw.polygon(surf, (140, 35, 45), [(66, 155), (74, 155), (72, 80), (68, 80)])
+        self.pg.draw.polygon(surf, (140, 35, 45), [(106, 155), (114, 155), (112, 80), (108, 80)])
+        self.pg.draw.rect(surf, (160, 40, 50), (76, 82, 28, 14), border_radius=4)
         return surf
 
     def criar_sprite_cama(self):
-        surf = pygame.Surface((260, 260), pygame.SRCALPHA)
-        pygame.draw.rect(surf, (85, 50, 28), (22, 195, 16, 65))
-        pygame.draw.rect(surf, (85, 50, 28), (222, 195, 16, 65))
-        # Vão escuro debaixo da cama (onde o jogador se esconde)
-        pygame.draw.rect(surf, (12, 12, 16), (38, 214, 184, 46))
-        pygame.draw.rect(surf, (95, 56, 32), (16, 115, 22, 110), border_radius=3)
-        pygame.draw.rect(surf, (105, 62, 35), (20, 192, 220, 22))
-        pygame.draw.rect(surf, (215, 215, 225), (34, 168, 204, 24), border_radius=4)
-        pygame.draw.rect(surf, (45, 65, 110), (85, 166, 155, 28), border_radius=4)
-        pygame.draw.ellipse(surf, (245, 245, 250), (38, 154, 48, 18))
+        surf = self.pg.Surface((260, 260), self.pg.SRCALPHA)
+        self.pg.draw.rect(surf, (85, 50, 28), (22, 195, 16, 65))
+        self.pg.draw.rect(surf, (85, 50, 28), (222, 195, 16, 65))
+        self.pg.draw.rect(surf, (12, 12, 16), (38, 214, 184, 46))
+        self.pg.draw.rect(surf, (95, 56, 32), (16, 115, 22, 110), border_radius=3)
+        self.pg.draw.rect(surf, (105, 62, 35), (20, 192, 220, 22))
+        self.pg.draw.rect(surf, (215, 215, 225), (34, 168, 204, 24), border_radius=4)
+        self.pg.draw.rect(surf, (45, 65, 110), (85, 166, 155, 28), border_radius=4)
+        self.pg.draw.ellipse(surf, (245, 245, 250), (38, 154, 48, 18))
         return surf
 
     def criar_sprite_armario(self):
-        surf = pygame.Surface((200, 220), pygame.SRCALPHA)
-        pygame.draw.rect(surf, (110, 68, 38), (45, 115, 110, 95), border_radius=4)
-        pygame.draw.rect(surf, (70, 42, 22), (45, 115, 110, 95), 3, border_radius=4)
-        pygame.draw.rect(surf, (130, 82, 46), (38, 108, 124, 10), border_radius=2)
-        pygame.draw.rect(surf, (65, 38, 20), (50, 210, 12, 10))
-        pygame.draw.rect(surf, (65, 38, 20), (138, 210, 12, 10))
-        pygame.draw.rect(surf, (92, 55, 30), (54, 124, 92, 36), border_radius=3)
-        pygame.draw.rect(surf, (55, 32, 16), (54, 124, 92, 36), 2, border_radius=3)
-        pygame.draw.rect(surf, (220, 195, 90), (90, 139, 20, 6), border_radius=2)
-        pygame.draw.rect(surf, (48, 28, 15), (56, 168, 88, 34))
+        surf = self.pg.Surface((200, 220), self.pg.SRCALPHA)
+        self.pg.draw.rect(surf, (110, 68, 38), (45, 115, 110, 95), border_radius=4)
+        self.pg.draw.rect(surf, (70, 42, 22), (45, 115, 110, 95), 3, border_radius=4)
+        self.pg.draw.rect(surf, (130, 82, 46), (38, 108, 124, 10), border_radius=2)
+        self.pg.draw.rect(surf, (65, 38, 20), (50, 210, 12, 10))
+        self.pg.draw.rect(surf, (65, 38, 20), (138, 210, 12, 10))
+        self.pg.draw.rect(surf, (92, 55, 30), (54, 124, 92, 36), border_radius=3)
+        self.pg.draw.rect(surf, (55, 32, 16), (54, 124, 92, 36), 2, border_radius=3)
+        self.pg.draw.rect(surf, (220, 195, 90), (90, 139, 20, 6), border_radius=2)
+        self.pg.draw.rect(surf, (48, 28, 15), (56, 168, 88, 34))
         return surf
 
     def criar_sprite_fantasma(self):
-        surf = pygame.Surface((220, 260), pygame.SRCALPHA)
-        pygame.draw.ellipse(surf, (180, 220, 255, 45), (35, 20, 150, 210))
+        surf = self.pg.Surface((220, 260), self.pg.SRCALPHA)
+        self.pg.draw.ellipse(surf, (180, 220, 255, 45), (35, 20, 150, 210))
         pontos_corpo = [
             (110, 30), (155, 65), (165, 145), (150, 225),
             (130, 195), (110, 230), (90, 195), (70, 225),
             (55, 145), (65, 65)
         ]
-        pygame.draw.polygon(surf, (210, 230, 245, 145), pontos_corpo)
-        pygame.draw.ellipse(surf, (15, 18, 25, 220), (82, 75, 18, 26))
-        pygame.draw.ellipse(surf, (15, 18, 25, 220), (120, 75, 18, 26))
-        pygame.draw.circle(surf, (255, 255, 255, 230), (91, 86), 3)
-        pygame.draw.circle(surf, (255, 255, 255, 230), (129, 86), 3)
-        pygame.draw.ellipse(surf, (15, 18, 25, 220), (98, 115, 24, 34))
+        self.pg.draw.polygon(surf, (210, 230, 245, 145), pontos_corpo)
+        self.pg.draw.ellipse(surf, (15, 18, 25, 220), (82, 75, 18, 26))
+        self.pg.draw.ellipse(surf, (15, 18, 25, 220), (120, 75, 18, 26))
+        self.pg.draw.circle(surf, (255, 255, 255, 230), (91, 86), 3)
+        self.pg.draw.circle(surf, (255, 255, 255, 230), (129, 86), 3)
+        self.pg.draw.ellipse(surf, (15, 18, 25, 220), (98, 115, 24, 34))
         return surf
 
     # ==========================================
@@ -435,7 +458,6 @@ class JogoStreaming3D:
         self.estado = "RELATORIO"
 
     def gerar_novo_alvo_hater(self):
-        """Posiciona um círculo vermelho clicável em cima do corpo/rosto do Hater na janela."""
         cx = LARGURA // 2 + random.randint(-85, 85)
         cy = ALTURA // 2 + random.randint(-65, 110)
         self.alvo_hater_pos = (cx, cy)
@@ -548,26 +570,26 @@ class JogoStreaming3D:
         return False
 
     def mover_jogador(self, dt):
-        teclas = pygame.key.get_pressed()
+        teclas = self.pg.key.get_pressed()
         vel_andar = 3.2 * dt
         vel_girar = 2.4 * dt
 
-        if teclas[pygame.K_LEFT]:
+        if teclas[self.pg.K_LEFT]:
             self.angulo -= vel_girar
-        if teclas[pygame.K_RIGHT]:
+        if teclas[self.pg.K_RIGHT]:
             self.angulo += vel_girar
 
         dx, dy = 0, 0
-        if teclas[pygame.K_w]:
+        if teclas[self.pg.K_w]:
             dx += math.cos(self.angulo) * vel_andar
             dy += math.sin(self.angulo) * vel_andar
-        if teclas[pygame.K_s]:
+        if teclas[self.pg.K_s]:
             dx -= math.cos(self.angulo) * vel_andar
             dy -= math.sin(self.angulo) * vel_andar
-        if teclas[pygame.K_a]:
+        if teclas[self.pg.K_a]:
             dx += math.sin(self.angulo) * vel_andar
             dy -= math.cos(self.angulo) * vel_andar
-        if teclas[pygame.K_d]:
+        if teclas[self.pg.K_d]:
             dx -= math.sin(self.angulo) * vel_andar
             dy += math.cos(self.angulo) * vel_andar
 
@@ -583,23 +605,19 @@ class JogoStreaming3D:
                 self.py = novo_y
 
     def verificar_interacao_proxima(self):
-        # 1. Perto do PC
         dist_pc = math.hypot(self.px - self.mesa_pos[0], self.py - self.mesa_pos[1])
         dist_cad = math.hypot(self.px - self.cadeira_pos[0], self.py - self.cadeira_pos[1])
         if dist_pc < 1.35 or dist_cad < 0.85:
             return "PC"
 
-        # 2. Perto da Cama (para se esconder debaixo dela!)
         dist_cama = math.hypot(self.px - self.cama_pos[0], self.py - self.cama_pos[1])
         if dist_cama < 1.35:
             return "CAMA"
 
-        # 3. Perto do Mini Armário (pegar pilha)
         dist_armario = math.hypot(self.px - self.armario_pos[0], self.py - self.armario_pos[1])
         if dist_armario < 1.15:
             return "ARMARIO"
 
-        # 4. Olhando para Porta ou Janela
         check_x = int(self.px + math.cos(self.angulo) * 1.15)
         check_y = int(self.py + math.sin(self.angulo) * 1.15)
         if 0 <= check_y < 8 and 0 <= check_x < 8:
@@ -683,15 +701,15 @@ class JogoStreaming3D:
 
             if tipo_bloco == 1:
                 cor_parede = (int(125 * sombra), int(128 * sombra), int(138 * sombra))
-                pygame.draw.rect(self.tela, cor_parede, (pos_x, pos_y, largura_coluna + 1, altura_parede))
+                self.pg.draw.rect(self.tela, cor_parede, (pos_x, pos_y, largura_coluna + 1, altura_parede))
                 alt_rodape = max(2, int(altura_parede * 0.08))
-                pygame.draw.rect(self.tela, (int(70 * sombra), int(70 * sombra), int(78 * sombra)),
-                                 (pos_x, pos_y + altura_parede - alt_rodape, largura_coluna + 1, alt_rodape))
+                self.pg.draw.rect(self.tela, (int(70 * sombra), int(70 * sombra), int(78 * sombra)),
+                                  (pos_x, pos_y + altura_parede - alt_rodape, largura_coluna + 1, alt_rodape))
 
             elif tipo_bloco == 2:
                 u = hit_y % 1.0
                 cor_parede = (int(125 * sombra), int(128 * sombra), int(138 * sombra))
-                pygame.draw.rect(self.tela, cor_parede, (pos_x, pos_y, largura_coluna + 1, altura_parede))
+                self.pg.draw.rect(self.tela, cor_parede, (pos_x, pos_y, largura_coluna + 1, altura_parede))
 
                 if 0.15 <= u <= 0.85:
                     alt_porta = int(altura_parede * 0.86)
@@ -707,26 +725,26 @@ class JogoStreaming3D:
                             int(46 * sombra * tom_tabua)
                         )
 
-                    pygame.draw.rect(self.tela, cor_porta, (pos_x, topo_porta, largura_coluna + 1, alt_porta))
+                    self.pg.draw.rect(self.tela, cor_porta, (pos_x, topo_porta, largura_coluna + 1, alt_porta))
 
                     if 0.48 <= u <= 0.52:
                         y_olho = topo_porta + int(alt_porta * 0.32)
                         raio_olho = max(2, int(altura_parede * 0.015))
-                        pygame.draw.circle(self.tela, (int(210 * sombra), int(210 * sombra), int(220 * sombra)),
-                                           (pos_x + largura_coluna // 2, y_olho), raio_olho)
-                        pygame.draw.circle(self.tela, (10, 10, 15),
-                                           (pos_x + largura_coluna // 2, y_olho), max(1, raio_olho // 2))
+                        self.pg.draw.circle(self.tela, (int(210 * sombra), int(210 * sombra), int(220 * sombra)),
+                                            (pos_x + largura_coluna // 2, y_olho), raio_olho)
+                        self.pg.draw.circle(self.tela, (10, 10, 15),
+                                            (pos_x + largura_coluna // 2, y_olho), max(1, raio_olho // 2))
 
                     if 0.72 <= u <= 0.76:
                         y_macaneta = topo_porta + int(alt_porta * 0.54)
                         raio_mac = max(2, int(altura_parede * 0.02))
-                        pygame.draw.circle(self.tela, (int(240 * sombra), int(200 * sombra), int(65 * sombra)),
-                                           (pos_x + largura_coluna // 2, y_macaneta), raio_mac)
+                        self.pg.draw.circle(self.tela, (int(240 * sombra), int(200 * sombra), int(65 * sombra)),
+                                            (pos_x + largura_coluna // 2, y_macaneta), raio_mac)
 
             elif tipo_bloco == 3:
                 u = hit_x % 1.0
                 cor_parede = (int(125 * sombra), int(128 * sombra), int(138 * sombra))
-                pygame.draw.rect(self.tela, cor_parede, (pos_x, pos_y, largura_coluna + 1, altura_parede))
+                self.pg.draw.rect(self.tela, cor_parede, (pos_x, pos_y, largura_coluna + 1, altura_parede))
 
                 if 0.12 <= u <= 0.88:
                     topo_jan = pos_y + int(altura_parede * 0.18)
@@ -734,17 +752,17 @@ class JogoStreaming3D:
 
                     if u < 0.16 or u > 0.84 or (0.48 <= u <= 0.52 and not self.janela_aberta):
                         cor_mold = (int(95 * sombra), int(58 * sombra), int(34 * sombra))
-                        pygame.draw.rect(self.tela, cor_mold, (pos_x, topo_jan, largura_coluna + 1, alt_jan))
+                        self.pg.draw.rect(self.tela, cor_mold, (pos_x, topo_jan, largura_coluna + 1, alt_jan))
                     else:
                         cor_ceu = (14, 22, 42) if self.janela_aberta else (int(35 * sombra + 15), int(55 * sombra + 25), int(95 * sombra + 45))
-                        pygame.draw.rect(self.tela, cor_ceu, (pos_x, topo_jan, largura_coluna + 1, alt_jan))
+                        self.pg.draw.rect(self.tela, cor_ceu, (pos_x, topo_jan, largura_coluna + 1, alt_jan))
 
                         if self.hater_na_janela and 0.30 <= u <= 0.70:
                             y_cabeca = topo_jan + int(alt_jan * 0.45)
                             alt_hater = int(alt_jan * 0.65)
-                            pygame.draw.rect(self.tela, (25, 25, 30), (pos_x, y_cabeca, largura_coluna + 1, alt_hater))
+                            self.pg.draw.rect(self.tela, (25, 25, 30), (pos_x, y_cabeca, largura_coluna + 1, alt_hater))
                             if (0.38 <= u <= 0.43) or (0.57 <= u <= 0.62):
-                                pygame.draw.rect(self.tela, (255, 230, 80), (pos_x, y_cabeca + int(alt_hater * 0.22), largura_coluna + 1, max(2, int(alt_jan * 0.06))))
+                                self.pg.draw.rect(self.tela, (255, 230, 80), (pos_x, y_cabeca + int(alt_hater * 0.22), largura_coluna + 1, max(2, int(alt_jan * 0.06))))
 
             raio_angulo += DELTA_ANGULO
 
@@ -790,7 +808,7 @@ class JogoStreaming3D:
             centro_x = int((0.5 + (angulo_obj / FOV)) * LARGURA)
             topo_y = (ALTURA // 2) + int((ALTURA / dist_perp) * 0.5) - tamanho_proj
 
-            sprite_redim = pygame.transform.scale(sprite, (tamanho_proj, tamanho_proj)).copy()
+            sprite_redim = self.pg.transform.scale(sprite, (tamanho_proj, tamanho_proj)).copy()
 
             luz = self.calcular_fator_luz(angulo_mundo, dist_perp)
             if tipo_obj == "FANTASMA":
@@ -799,7 +817,7 @@ class JogoStreaming3D:
                 sprite_redim.set_alpha(opacidade)
             else:
                 escurecer = int(255 * luz)
-                sprite_redim.fill((escurecer, escurecer, escurecer), special_flags=pygame.BLEND_RGBA_MULT)
+                sprite_redim.fill((escurecer, escurecer, escurecer), special_flags=self.pg.BLEND_RGBA_MULT)
 
             largura_coluna = LARGURA // NUM_RAIOS
             for col_px in range(tamanho_proj):
@@ -811,10 +829,10 @@ class JogoStreaming3D:
 
     def desenhar_lanterna_mao(self):
         lx, ly = LARGURA - 175, ALTURA - 120
-        pygame.draw.polygon(self.tela, (35, 38, 45), [(lx + 50, ly + 120), (lx + 115, ly + 120), (lx + 75, ly + 35), (lx + 35, ly + 45)])
-        pygame.draw.polygon(self.tela, (55, 60, 70), [(lx + 28, ly + 48), (lx + 82, ly + 32), (lx + 72, ly + 12), (lx + 22, ly + 26)])
+        self.pg.draw.polygon(self.tela, (35, 38, 45), [(lx + 50, ly + 120), (lx + 115, ly + 120), (lx + 75, ly + 35), (lx + 35, ly + 45)])
+        self.pg.draw.polygon(self.tela, (55, 60, 70), [(lx + 28, ly + 48), (lx + 82, ly + 32), (lx + 72, ly + 12), (lx + 22, ly + 26)])
         cor_lente = (255, 245, 170) if (self.lanterna_ligada and self.bateria > 0) else (40, 45, 50)
-        pygame.draw.ellipse(self.tela, cor_lente, (lx + 24, ly + 14, 48, 16))
+        self.pg.draw.ellipse(self.tela, cor_lente, (lx + 24, ly + 14, 48, 16))
 
     # ==========================================
     # TELAS DE INTERFACE (PC, QUARTO, OLHO MÁGICO, JANELA, DEBAIXO DA CAMA)
@@ -822,7 +840,7 @@ class JogoStreaming3D:
 
     def desenhar_menu_pc(self):
         self.tela.fill((12, 16, 24))
-        pygame.draw.rect(self.tela, (0, 200, 255), (180, 120, LARGURA - 360, ALTURA - 240), 2, border_radius=12)
+        self.pg.draw.rect(self.tela, (0, 200, 255), (180, 120, LARGURA - 360, ALTURA - 240), 2, border_radius=12)
 
         t1 = self.fonte_grande.render("COMPUTADOR DO STREAMER", True, (0, 220, 255))
         self.tela.blit(t1, (LARGURA // 2 - t1.get_width() // 2, 150))
@@ -847,10 +865,10 @@ class JogoStreaming3D:
 
     def desenhar_tela_pc(self):
         self.tela.fill((15, 20, 30))
-        pygame.draw.rect(self.tela, (40, 45, 60), (20, 18, LARGURA - 40, ALTURA - 36), border_radius=12)
-        pygame.draw.rect(self.tela, (12, 14, 22), (35, 32, LARGURA - 70, ALTURA - 64))
+        self.pg.draw.rect(self.tela, (40, 45, 60), (20, 18, LARGURA - 40, ALTURA - 36), border_radius=12)
+        self.pg.draw.rect(self.tela, (12, 14, 22), (35, 32, LARGURA - 70, ALTURA - 64))
 
-        pygame.draw.rect(self.tela, (25, 30, 45), (35, 32, LARGURA - 70, 45))
+        self.pg.draw.rect(self.tela, (25, 30, 45), (35, 32, LARGURA - 70, 45))
         status = "🔴 AO VIVO" if self.em_live else "⚪ OFFLINE"
         cor_st = (255, 60, 60) if self.em_live else (180, 180, 180)
         hora_atual = self.obter_horario_formatado()
@@ -860,26 +878,26 @@ class JogoStreaming3D:
         self.tela.blit(self.fonte_hud.render(metricas, True, (255, 255, 255)), (530, 45))
 
         cam_x, cam_y, cam_w, cam_h = 50, 95, 450, 255
-        pygame.draw.rect(self.tela, (20, 25, 38), (cam_x, cam_y, cam_w, cam_h))
-        pygame.draw.rect(self.tela, (0, 200, 255), (cam_x, cam_y, cam_w, cam_h), 2)
+        self.pg.draw.rect(self.tela, (20, 25, 38), (cam_x, cam_y, cam_w, cam_h))
+        self.pg.draw.rect(self.tela, (0, 200, 255), (cam_x, cam_y, cam_w, cam_h), 2)
         self.tela.blit(self.fonte_chat.render("[● REC] WEBCAM HD 1080p", True, (255, 70, 70)), (cam_x + 12, cam_y + 10))
 
-        pygame.draw.circle(self.tela, (230, 190, 150), (cam_x + 90, cam_y + 125), 30)
-        pygame.draw.circle(self.tela, (20, 20, 20), (cam_x + 80, cam_y + 120), 4)
-        pygame.draw.circle(self.tela, (20, 20, 20), (cam_x + 100, cam_y + 120), 4)
-        pygame.draw.arc(self.tela, (20, 20, 20), (cam_x + 80, cam_y + 126, 20, 12), math.pi, 2 * math.pi, 2)
-        pygame.draw.rect(self.tela, (50, 130, 220), (cam_x + 58, cam_y + 160, 64, 75), border_radius=8)
+        self.pg.draw.circle(self.tela, (230, 190, 150), (cam_x + 90, cam_y + 125), 30)
+        self.pg.draw.circle(self.tela, (20, 20, 20), (cam_x + 80, cam_y + 120), 4)
+        self.pg.draw.circle(self.tela, (20, 20, 20), (cam_x + 100, cam_y + 120), 4)
+        self.pg.draw.arc(self.tela, (20, 20, 20), (cam_x + 80, cam_y + 126, 20, 12), math.pi, 2 * math.pi, 2)
+        self.pg.draw.rect(self.tela, (50, 130, 220), (cam_x + 58, cam_y + 160, 64, 75), border_radius=8)
 
-        pygame.draw.rect(self.tela, (245, 245, 245), (cam_x + 145, cam_y + 75, 285, 90), border_radius=10)
+        self.pg.draw.rect(self.tela, (245, 245, 245), (cam_x + 145, cam_y + 75, 285, 90), border_radius=10)
         self.tela.blit(self.fonte_pequena.render(f"\"{self.fala_personagem[:26]}", True, (15, 15, 15)), (cam_x + 155, cam_y + 92))
         if len(self.fala_personagem) > 26:
             self.tela.blit(self.fonte_pequena.render(f"{self.fala_personagem[26:52]}\"", True, (15, 15, 15)), (cam_x + 155, cam_y + 118))
 
         chat_x, chat_y, chat_w, chat_h = 515, 95, 335, 465
-        pygame.draw.rect(self.tela, (18, 22, 32), (chat_x, chat_y, chat_w, chat_h))
-        pygame.draw.rect(self.tela, (70, 80, 100), (chat_x, chat_y, chat_w, chat_h), 2)
+        self.pg.draw.rect(self.tela, (18, 22, 32), (chat_x, chat_y, chat_w, chat_h))
+        self.pg.draw.rect(self.tela, (70, 80, 100), (chat_x, chat_y, chat_w, chat_h), 2)
         self.tela.blit(self.fonte_hud.render("CHAT DA LIVE", True, (0, 220, 255)), (chat_x + 12, chat_y + 10))
-        pygame.draw.line(self.tela, (60, 70, 85), (chat_x + 10, chat_y + 36), (chat_x + chat_w - 10, chat_y + 36), 1)
+        self.pg.draw.line(self.tela, (60, 70, 85), (chat_x + 10, chat_y + 36), (chat_x + chat_w - 10, chat_y + 36), 1)
 
         y_msg = chat_y + 46
         for autor, msg, cor_nick in self.historico_chat:
@@ -894,11 +912,11 @@ class JogoStreaming3D:
             y_msg += 4
 
         if self.digitando_fala:
-            pygame.draw.rect(self.tela, (30, 40, 60), (50, 370, 450, 190), border_radius=8)
-            pygame.draw.rect(self.tela, (0, 255, 255), (50, 370, 450, 190), 2, border_radius=8)
+            self.pg.draw.rect(self.tela, (30, 40, 60), (50, 370, 450, 190), border_radius=8)
+            self.pg.draw.rect(self.tela, (0, 255, 255), (50, 370, 450, 190), 2, border_radius=8)
             self.tela.blit(self.fonte_pequena.render("DIGITE SUA FALA (ENTER para enviar):", True, (0, 255, 255)), (65, 390))
 
-            pygame.draw.rect(self.tela, (10, 12, 18), (65, 425, 420, 42))
+            self.pg.draw.rect(self.tela, (10, 12, 18), (65, 425, 420, 42))
             cursor = "|" if int(time.time() * 2) % 2 == 0 else ""
             self.tela.blit(self.fonte_pequena.render(self.texto_digitado + cursor, True, (255, 255, 255)), (75, 437))
             self.tela.blit(self.fonte_chat.render("[ESC] Cancelar", True, (180, 180, 180)), (65, 485))
@@ -917,11 +935,10 @@ class JogoStreaming3D:
                 y_op += 36
 
     def desenhar_hud_quarto_3d(self):
-        # Minimapa no canto superior direito
         tam = 15
         ox = LARGURA - (8 * tam) - 15
         oy = 15
-        pygame.draw.rect(self.tela, (0, 0, 0), (ox - 3, oy - 3, 8 * tam + 6, 8 * tam + 6))
+        self.pg.draw.rect(self.tela, (0, 0, 0), (ox - 3, oy - 3, 8 * tam + 6, 8 * tam + 6))
         for y in range(8):
             for x in range(8):
                 b = MAPA_QUARTO[y][x]
@@ -933,18 +950,18 @@ class JogoStreaming3D:
                     cor = (80, 170, 230)
                 else:
                     cor = (22, 22, 26)
-                pygame.draw.rect(self.tela, cor, (ox + x * tam, oy + y * tam, tam - 1, tam - 1))
+                self.pg.draw.rect(self.tela, cor, (ox + x * tam, oy + y * tam, tam - 1, tam - 1))
 
         cor_pc_mini = (0, 200, 255) if self.pc_ligado else (60, 70, 80)
-        pygame.draw.rect(self.tela, cor_pc_mini, (ox + int(self.mesa_pos[0] * tam) - 6, oy + int(self.mesa_pos[1] * tam) - 3, 12, 6))
-        pygame.draw.circle(self.tela, (200, 60, 70), (ox + int(self.cadeira_pos[0] * tam), oy + int(self.cadeira_pos[1] * tam)), 3)
-        pygame.draw.rect(self.tela, (70, 100, 180), (ox + int(self.cama_pos[0] * tam) - 3, oy + int(self.cama_pos[1] * tam) - 6, 6, 12))
-        pygame.draw.rect(self.tela, (160, 110, 60), (ox + int(self.armario_pos[0] * tam) - 3, oy + int(self.armario_pos[1] * tam) - 3, 6, 6))
+        self.pg.draw.rect(self.tela, cor_pc_mini, (ox + int(self.mesa_pos[0] * tam) - 6, oy + int(self.mesa_pos[1] * tam) - 3, 12, 6))
+        self.pg.draw.circle(self.tela, (200, 60, 70), (ox + int(self.cadeira_pos[0] * tam), oy + int(self.cadeira_pos[1] * tam)), 3)
+        self.pg.draw.rect(self.tela, (70, 100, 180), (ox + int(self.cama_pos[0] * tam) - 3, oy + int(self.cama_pos[1] * tam) - 6, 6, 12))
+        self.pg.draw.rect(self.tela, (160, 110, 60), (ox + int(self.armario_pos[0] * tam) - 3, oy + int(self.armario_pos[1] * tam) - 3, 6, 6))
 
         jx = ox + int(self.px * tam)
         jy = oy + int(self.py * tam)
-        pygame.draw.circle(self.tela, (255, 255, 0), (jx, jy), 4)
-        pygame.draw.line(self.tela, (255, 255, 0), (jx, jy), (jx + int(math.cos(self.angulo) * 10), jy + int(math.sin(self.angulo) * 10)), 2)
+        self.pg.draw.circle(self.tela, (255, 255, 0), (jx, jy), 4)
+        self.pg.draw.line(self.tela, (255, 255, 0), (jx, jy), (jx + int(math.cos(self.angulo) * 10), jy + int(math.sin(self.angulo) * 10)), 2)
 
         hora_atual = self.obter_horario_formatado()
         self.tela.blit(self.fonte_aviso.render(f"🕒 {hora_atual} / 06:00 AM", True, (255, 255, 255)), (15, 12))
@@ -963,13 +980,12 @@ class JogoStreaming3D:
 
         estado_lant = "LIGADA [F]" if (self.lanterna_ligada and self.bateria > 0) else "DESLIGADA [F]"
         self.tela.blit(self.fonte_chat.render(f"Lanterna: {estado_lant}", True, (240, 230, 140)), (15, 66))
-        pygame.draw.rect(self.tela, (50, 50, 55), (15, 86, 140, 14), border_radius=3)
+        self.pg.draw.rect(self.tela, (50, 50, 55), (15, 86, 140, 14), border_radius=3)
         cor_bat = (80, 230, 100) if self.bateria > 40 else (240, 180, 40) if self.bateria > 15 else (230, 50, 50)
-        pygame.draw.rect(self.tela, cor_bat, (17, 88, int(136 * (self.bateria / 100.0)), 10), border_radius=2)
+        self.pg.draw.rect(self.tela, cor_bat, (17, 88, int(136 * (self.bateria / 100.0)), 10), border_radius=2)
 
         self.tela.blit(self.fonte_chat.render("WASD: Andar | Setas: Girar | F: Lanterna | E: Interagir", True, (160, 160, 160)), (15, 108))
 
-        # Alerta quando a Mãe arromba/abre a porta e entra no quarto
         if self.mae_no_quarto:
             alerta_mae = self.fonte_aviso.render("⚠️ SUA MÃE ENTROU NO QUARTO! CORRA PARA A CAMA [E]!", True, (255, 90, 90))
             self.tela.blit(alerta_mae, (LARGURA // 2 - alerta_mae.get_width() // 2, 140))
@@ -996,29 +1012,22 @@ class JogoStreaming3D:
             self.tela.blit(t, (LARGURA // 2 - t.get_width() // 2, ALTURA - 55))
 
     def desenhar_debaixo_da_cama(self):
-        """Visão em primeira pessoa escondido debaixo da cama enquanto a Mãe procura no quarto por 5s."""
         self.tela.fill((8, 8, 12))
+        self.pg.draw.rect(self.tela, (28, 22, 18), (0, ALTURA // 2 + 40, LARGURA, ALTURA // 2))
 
-        # Chão do quarto visto rente ao solo
-        pygame.draw.rect(self.tela, (28, 22, 18), (0, ALTURA // 2 + 40, LARGURA, ALTURA // 2))
-
-        # Pernas e chinelos da Mãe caminhando de um lado para o outro enquanto procura
         if self.mae_no_quarto:
             passo_x = int(math.sin(self.tempo_debaixo_cama * 3.5) * 180)
             mx = (LARGURA // 2) + passo_x
             my = ALTURA // 2 + 55
 
-            # Pernas / calça do pijama
-            pygame.draw.rect(self.tela, (75, 45, 85), (mx - 45, my - 140, 32, 145))
-            pygame.draw.rect(self.tela, (75, 45, 85), (mx + 13, my - 140, 32, 145))
-            # Chinelos
-            pygame.draw.ellipse(self.tela, (210, 120, 140), (mx - 50, my - 5, 42, 18))
-            pygame.draw.ellipse(self.tela, (210, 120, 140), (mx + 8, my - 5, 42, 18))
+            self.pg.draw.rect(self.tela, (75, 45, 85), (mx - 45, my - 140, 32, 145))
+            self.pg.draw.rect(self.tela, (75, 45, 85), (mx + 13, my - 140, 32, 145))
+            self.pg.draw.ellipse(self.tela, (210, 120, 140), (mx - 50, my - 5, 42, 18))
+            self.pg.draw.ellipse(self.tela, (210, 120, 140), (mx + 8, my - 5, 42, 18))
 
-        # Estrutura de madeira e sombra da beirada da cama emoldurando a visão
-        pygame.draw.rect(self.tela, (35, 20, 12), (0, 0, LARGURA, 115))
-        pygame.draw.rect(self.tela, (25, 14, 8), (0, 0, 55, ALTURA))
-        pygame.draw.rect(self.tela, (25, 14, 8), (LARGURA - 55, 0, 55, ALTURA))
+        self.pg.draw.rect(self.tela, (35, 20, 12), (0, 0, LARGURA, 115))
+        self.pg.draw.rect(self.tela, (25, 14, 8), (0, 0, 55, ALTURA))
+        self.pg.draw.rect(self.tela, (25, 14, 8), (LARGURA - 55, 0, 55, ALTURA))
 
         if self.lanterna_ligada:
             aviso_luz = self.fonte_aviso.render("APAGUE A LANTERNA [F] SENÃO ELA VAI TE VER!", True, (255, 80, 80))
@@ -1028,17 +1037,16 @@ class JogoStreaming3D:
             self.tela.blit(txt, (LARGURA // 2 - txt.get_width() // 2, 45))
 
     def desenhar_tela_janela(self):
-        """Tela da janela aberta com CÍRCULOS VERMELHOS CLICÁVEIS para dar socos no Hater."""
         self.tela.fill((12, 18, 34))
 
-        pygame.draw.circle(self.tela, (235, 235, 210), (LARGURA - 210, 135), 32)
+        self.pg.draw.circle(self.tela, (235, 235, 210), (LARGURA - 210, 135), 32)
         for sx, sy in [(220, 110), (310, 160), (480, 95), (610, 180), (260, 240)]:
-            pygame.draw.circle(self.tela, (200, 210, 240), (sx, sy), 2)
+            self.pg.draw.circle(self.tela, (200, 210, 240), (sx, sy), 2)
 
-        pygame.draw.rect(self.tela, (75, 45, 25), (0, 0, LARGURA, 45))
-        pygame.draw.rect(self.tela, (75, 45, 25), (0, ALTURA - 90, LARGURA, 90))
-        pygame.draw.rect(self.tela, (75, 45, 25), (0, 0, 70, ALTURA))
-        pygame.draw.rect(self.tela, (75, 45, 25), (LARGURA - 70, 0, 70, ALTURA))
+        self.pg.draw.rect(self.tela, (75, 45, 25), (0, 0, LARGURA, 45))
+        self.pg.draw.rect(self.tela, (75, 45, 25), (0, ALTURA - 90, LARGURA, 90))
+        self.pg.draw.rect(self.tela, (75, 45, 25), (0, 0, 70, ALTURA))
+        self.pg.draw.rect(self.tela, (75, 45, 25), (LARGURA - 70, 0, 70, ALTURA))
 
         if self.hater_na_janela:
             offset_x = int(math.sin(self.animacao_soco * 25) * 28) if self.animacao_soco > 0 else 0
@@ -1047,32 +1055,27 @@ class JogoStreaming3D:
             hx = (LARGURA // 2) + offset_x
             hy = (ALTURA // 2 + 30) + offset_y
 
-            # Moletom preto com capuz do Hater
-            pygame.draw.ellipse(self.tela, (22, 24, 30), (hx - 115, hy + 20, 230, 250))
-            pygame.draw.circle(self.tela, (28, 30, 38), (hx, hy - 40), 82)
-            # Rosto raivoso
-            pygame.draw.circle(self.tela, (215, 175, 145), (hx, hy - 35), 58)
-            pygame.draw.line(self.tela, (20, 20, 20), (hx - 35, hy - 55), (hx - 8, hy - 42), 6)
-            pygame.draw.line(self.tela, (20, 20, 20), (hx + 35, hy - 55), (hx + 8, hy - 42), 6)
-            pygame.draw.circle(self.tela, (20, 20, 20), (hx - 20, hy - 35), 6)
-            pygame.draw.circle(self.tela, (20, 20, 20), (hx + 20, hy - 35), 6)
-            pygame.draw.ellipse(self.tela, (120, 25, 25), (hx - 22, hy - 12, 44, 24))
+            self.pg.draw.ellipse(self.tela, (22, 24, 30), (hx - 115, hy + 20, 230, 250))
+            self.pg.draw.circle(self.tela, (28, 30, 38), (hx, hy - 40), 82)
+            self.pg.draw.circle(self.tela, (215, 175, 145), (hx, hy - 35), 58)
+            self.pg.draw.line(self.tela, (20, 20, 20), (hx - 35, hy - 55), (hx - 8, hy - 42), 6)
+            self.pg.draw.line(self.tela, (20, 20, 20), (hx + 35, hy - 55), (hx + 8, hy - 42), 6)
+            self.pg.draw.circle(self.tela, (20, 20, 20), (hx - 20, hy - 35), 6)
+            self.pg.draw.circle(self.tela, (20, 20, 20), (hx + 20, hy - 35), 6)
+            self.pg.draw.ellipse(self.tela, (120, 25, 25), (hx - 22, hy - 12, 44, 24))
 
-            # CÍRCULO VERMELHO CLICÁVEL (ALVO DO SOCO)
             ax, ay = self.alvo_hater_pos
             pulso = int(math.sin(time.time() * 10) * 4)
-            pygame.draw.circle(self.tela, (255, 40, 40), (ax, ay), self.alvo_hater_raio + pulso)
-            pygame.draw.circle(self.tela, (255, 255, 255), (ax, ay), self.alvo_hater_raio + pulso, 3)
-            pygame.draw.circle(self.tela, (150, 0, 0), (ax, ay), 10)
+            self.pg.draw.circle(self.tela, (255, 40, 40), (ax, ay), self.alvo_hater_raio + pulso)
+            self.pg.draw.circle(self.tela, (255, 255, 255), (ax, ay), self.alvo_hater_raio + pulso, 3)
+            self.pg.draw.circle(self.tela, (150, 0, 0), (ax, ay), 10)
 
-            # Mão dando soco no alvo clicado
             if self.animacao_soco > 0:
-                pygame.draw.circle(self.tela, (235, 195, 155), (ax, ay), 38)
-                pygame.draw.circle(self.tela, (255, 230, 90), (ax, ay), 48, 4)
+                self.pg.draw.circle(self.tela, (235, 195, 155), (ax, ay), 38)
+                self.pg.draw.circle(self.tela, (255, 230, 90), (ax, ay), 48, 4)
 
-            # Barra de resistência do Hater
-            pygame.draw.rect(self.tela, (40, 40, 45), (LARGURA // 2 - 150, 65, 300, 20), border_radius=4)
-            pygame.draw.rect(self.tela, (230, 60, 60), (LARGURA // 2 - 148, 67, int(296 * (self.vida_hater / 6.0)), 16), border_radius=3)
+            self.pg.draw.rect(self.tela, (40, 40, 45), (LARGURA // 2 - 150, 65, 300, 20), border_radius=4)
+            self.pg.draw.rect(self.tela, (230, 60, 60), (LARGURA // 2 - 148, 67, int(296 * (self.vida_hater / 6.0)), 16), border_radius=3)
 
             instrucao = self.fonte_aviso.render("CLIQUE NOS CÍRCULOS VERMELHOS PARA SOCAR O HATER!", True, (255, 230, 90))
             self.tela.blit(instrucao, (LARGURA // 2 - instrucao.get_width() // 2, ALTURA - 58))
@@ -1085,11 +1088,11 @@ class JogoStreaming3D:
         cx, cy = LARGURA // 2, ALTURA // 2
         raio_lente = 195
 
-        lente = pygame.Surface((raio_lente * 2, raio_lente * 2), pygame.SRCALPHA)
+        lente = self.pg.Surface((raio_lente * 2, raio_lente * 2), self.pg.SRCALPHA)
 
-        pygame.draw.circle(lente, (18, 20, 28), (raio_lente, raio_lente), raio_lente)
-        pygame.draw.polygon(lente, (12, 13, 18), [(0, 0), (raio_lente - 55, raio_lente - 75), (raio_lente - 55, raio_lente + 95), (0, raio_lente * 2)])
-        pygame.draw.polygon(lente, (12, 13, 18), [(raio_lente * 2, 0), (raio_lente + 55, raio_lente - 75), (raio_lente + 55, raio_lente + 95), (raio_lente * 2, raio_lente * 2)])
+        self.pg.draw.circle(lente, (18, 20, 28), (raio_lente, raio_lente), raio_lente)
+        self.pg.draw.polygon(lente, (12, 13, 18), [(0, 0), (raio_lente - 55, raio_lente - 75), (raio_lente - 55, raio_lente + 95), (0, raio_lente * 2)])
+        self.pg.draw.polygon(lente, (12, 13, 18), [(raio_lente * 2, 0), (raio_lente + 55, raio_lente - 75), (raio_lente + 55, raio_lente + 95), (raio_lente * 2, raio_lente * 2)])
 
         if self.ameaca_porta:
             progresso = min(1.0, self.tempo_encarando / self.tempo_necessario_encarar)
@@ -1106,9 +1109,9 @@ class JogoStreaming3D:
             altura_corpo = int(250 * escala)
             raio_cabeca = max(4, int(44 * escala))
 
-            camada_sombra = pygame.Surface((raio_lente * 2, raio_lente * 2), pygame.SRCALPHA)
-            pygame.draw.ellipse(camada_sombra, (3, 3, 5, alpha), (pos_x - largura_corpo // 2, pos_y - int(25 * escala), largura_corpo, altura_corpo))
-            pygame.draw.circle(camada_sombra, (3, 3, 5, alpha), (pos_x, pos_y - int(45 * escala)), raio_cabeca)
+            camada_sombra = self.pg.Surface((raio_lente * 2, raio_lente * 2), self.pg.SRCALPHA)
+            self.pg.draw.ellipse(camada_sombra, (3, 3, 5, alpha), (pos_x - largura_corpo // 2, pos_y - int(25 * escala), largura_corpo, altura_corpo))
+            self.pg.draw.circle(camada_sombra, (3, 3, 5, alpha), (pos_x, pos_y - int(45 * escala)), raio_cabeca)
 
             raio_olho = max(1, int(7 * escala))
             dist_olhos = int(17 * escala)
@@ -1116,30 +1119,30 @@ class JogoStreaming3D:
             brilho_vermelho = int(255 * max(0.0, 1.0 - (progresso * 1.15)))
 
             if brilho_vermelho > 10:
-                pygame.draw.circle(camada_sombra, (brilho_vermelho, 0, 0, alpha), (pos_x - dist_olhos, y_olhos), raio_olho)
-                pygame.draw.circle(camada_sombra, (brilho_vermelho, 0, 0, alpha), (pos_x + dist_olhos, y_olhos), raio_olho)
+                self.pg.draw.circle(camada_sombra, (brilho_vermelho, 0, 0, alpha), (pos_x - dist_olhos, y_olhos), raio_olho)
+                self.pg.draw.circle(camada_sombra, (brilho_vermelho, 0, 0, alpha), (pos_x + dist_olhos, y_olhos), raio_olho)
 
             lente.blit(camada_sombra, (0, 0))
 
         elif self.mae_na_porta:
-            pygame.draw.ellipse(lente, (85, 50, 95), (raio_lente - 75, raio_lente - 15, 150, 220))
-            pygame.draw.circle(lente, (215, 175, 145), (raio_lente, raio_lente - 50), 42)
-            pygame.draw.arc(lente, (60, 40, 30), (raio_lente - 44, raio_lente - 95, 88, 70), 0, math.pi, 14)
-            pygame.draw.line(lente, (30, 20, 15), (raio_lente - 24, raio_lente - 62), (raio_lente - 8, raio_lente - 55), 3)
-            pygame.draw.line(lente, (30, 20, 15), (raio_lente + 24, raio_lente - 62), (raio_lente + 8, raio_lente - 55), 3)
-            pygame.draw.circle(lente, (20, 20, 20), (raio_lente - 15, raio_lente - 50), 4)
-            pygame.draw.circle(lente, (20, 20, 20), (raio_lente + 15, raio_lente - 50), 4)
+            self.pg.draw.ellipse(lente, (85, 50, 95), (raio_lente - 75, raio_lente - 15, 150, 220))
+            self.pg.draw.circle(lente, (215, 175, 145), (raio_lente, raio_lente - 50), 42)
+            self.pg.draw.arc(lente, (60, 40, 30), (raio_lente - 44, raio_lente - 95, 88, 70), 0, math.pi, 14)
+            self.pg.draw.line(lente, (30, 20, 15), (raio_lente - 24, raio_lente - 62), (raio_lente - 8, raio_lente - 55), 3)
+            self.pg.draw.line(lente, (30, 20, 15), (raio_lente + 24, raio_lente - 62), (raio_lente + 8, raio_lente - 55), 3)
+            self.pg.draw.circle(lente, (20, 20, 20), (raio_lente - 15, raio_lente - 50), 4)
+            self.pg.draw.circle(lente, (20, 20, 20), (raio_lente + 15, raio_lente - 50), 4)
 
-        mascara = pygame.Surface((raio_lente * 2, raio_lente * 2), pygame.SRCALPHA)
-        pygame.draw.circle(mascara, (255, 255, 255, 255), (raio_lente, raio_lente), raio_lente)
-        lente.blit(mascara, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+        mascara = self.pg.Surface((raio_lente * 2, raio_lente * 2), self.pg.SRCALPHA)
+        self.pg.draw.circle(mascara, (255, 255, 255, 255), (raio_lente, raio_lente), raio_lente)
+        lente.blit(mascara, (0, 0), special_flags=self.pg.BLEND_RGBA_MIN)
 
         self.tela.blit(lente, (cx - raio_lente, cy - raio_lente))
-        pygame.draw.circle(self.tela, (55, 58, 65), (cx, cy), raio_lente, 8)
+        self.pg.draw.circle(self.tela, (55, 58, 65), (cx, cy), raio_lente, 8)
 
     def desenhar_relatorio_final(self):
         self.tela.fill((12, 15, 24))
-        pygame.draw.rect(self.tela, (0, 200, 255), (150, 80, LARGURA - 300, ALTURA - 160), 3, border_radius=12)
+        self.pg.draw.rect(self.tela, (0, 200, 255), (150, 80, LARGURA - 300, ALTURA - 160), 3, border_radius=12)
 
         t1 = self.fonte_grande.render("TRANSMISSÃO ENCERRADA", True, (0, 220, 255))
         self.tela.blit(t1, (LARGURA // 2 - t1.get_width() // 2, 115))
@@ -1164,7 +1167,7 @@ class JogoStreaming3D:
 
     def desenhar_vitoria_6am(self):
         self.tela.fill((10, 25, 45))
-        pygame.draw.rect(self.tela, (255, 215, 80), (110, 55, LARGURA - 220, ALTURA - 110), 4, border_radius=14)
+        self.pg.draw.rect(self.tela, (255, 215, 80), (110, 55, LARGURA - 220, ALTURA - 110), 4, border_radius=14)
 
         t_hora = self.fonte_gigante.render("☀️ 06:00 AM ☀️", True, (255, 225, 90))
         t_sub = self.fonte_aviso.render("VOCÊ SOBREVIVEU À MADRUGADA DE STREAMING!", True, (130, 255, 160))
@@ -1195,28 +1198,28 @@ class JogoStreaming3D:
     def desenhar_gameover(self):
         if self.tipo_gameover == "MAE":
             self.tela.fill((45, 25, 60))
-            pygame.draw.circle(self.tela, (215, 175, 145), (LARGURA // 2, ALTURA // 2 - 40), 110)
-            pygame.draw.line(self.tela, (30, 20, 15), (LARGURA // 2 - 55, ALTURA // 2 - 70), (LARGURA // 2 - 15, ALTURA // 2 - 50), 6)
-            pygame.draw.line(self.tela, (30, 20, 15), (LARGURA // 2 + 55, ALTURA // 2 - 70), (LARGURA // 2 + 15, ALTURA // 2 - 50), 6)
-            pygame.draw.circle(self.tela, (20, 20, 20), (LARGURA // 2 - 35, ALTURA // 2 - 40), 10)
-            pygame.draw.circle(self.tela, (20, 20, 20), (LARGURA // 2 + 35, ALTURA // 2 - 40), 10)
-            pygame.draw.arc(self.tela, (150, 30, 30), (LARGURA // 2 - 40, ALTURA // 2 + 5, 80, 45), 0, math.pi, 5)
+            self.pg.draw.circle(self.tela, (215, 175, 145), (LARGURA // 2, ALTURA // 2 - 40), 110)
+            self.pg.draw.line(self.tela, (30, 20, 15), (LARGURA // 2 - 55, ALTURA // 2 - 70), (LARGURA // 2 - 15, ALTURA // 2 - 50), 6)
+            self.pg.draw.line(self.tela, (30, 20, 15), (LARGURA // 2 + 55, ALTURA // 2 - 70), (LARGURA // 2 + 15, ALTURA // 2 - 50), 6)
+            self.pg.draw.circle(self.tela, (20, 20, 20), (LARGURA // 2 - 35, ALTURA // 2 - 40), 10)
+            self.pg.draw.circle(self.tela, (20, 20, 20), (LARGURA // 2 + 35, ALTURA // 2 - 40), 10)
+            self.pg.draw.arc(self.tela, (150, 30, 30), (LARGURA // 2 - 40, ALTURA // 2 + 5, 80, 45), 0, math.pi, 5)
         elif self.tipo_gameover == "HATER":
             self.tela.fill((60, 20, 10))
-            pygame.draw.circle(self.tela, (25, 28, 35), (LARGURA // 2, ALTURA // 2 - 35), 120)
-            pygame.draw.circle(self.tela, (215, 175, 145), (LARGURA // 2, ALTURA // 2 - 30), 85)
-            pygame.draw.line(self.tela, (20, 20, 20), (LARGURA // 2 - 45, ALTURA // 2 - 60), (LARGURA // 2 - 10, ALTURA // 2 - 42), 7)
-            pygame.draw.line(self.tela, (20, 20, 20), (LARGURA // 2 + 45, ALTURA // 2 - 60), (LARGURA // 2 + 10, ALTURA // 2 - 42), 7)
-            pygame.draw.circle(self.tela, (20, 20, 20), (LARGURA // 2 - 28, ALTURA // 2 - 32), 9)
-            pygame.draw.circle(self.tela, (20, 20, 20), (LARGURA // 2 + 28, ALTURA // 2 - 32), 9)
+            self.pg.draw.circle(self.tela, (25, 28, 35), (LARGURA // 2, ALTURA // 2 - 35), 120)
+            self.pg.draw.circle(self.tela, (215, 175, 145), (LARGURA // 2, ALTURA // 2 - 30), 85)
+            self.pg.draw.line(self.tela, (20, 20, 20), (LARGURA // 2 - 45, ALTURA // 2 - 60), (LARGURA // 2 - 10, ALTURA // 2 - 42), 7)
+            self.pg.draw.line(self.tela, (20, 20, 20), (LARGURA // 2 + 45, ALTURA // 2 - 60), (LARGURA // 2 + 10, ALTURA // 2 - 42), 7)
+            self.pg.draw.circle(self.tela, (20, 20, 20), (LARGURA // 2 - 28, ALTURA // 2 - 32), 9)
+            self.pg.draw.circle(self.tela, (20, 20, 20), (LARGURA // 2 + 28, ALTURA // 2 - 32), 9)
         else:
             self.tela.fill((85, 0, 0))
-            pygame.draw.circle(self.tela, (0, 0, 0), (LARGURA // 2, ALTURA // 2 - 30), 135)
-            pygame.draw.circle(self.tela, (255, 255, 255), (LARGURA // 2 - 45, ALTURA // 2 - 60), 22)
-            pygame.draw.circle(self.tela, (255, 255, 255), (LARGURA // 2 + 45, ALTURA // 2 - 60), 22)
-            pygame.draw.circle(self.tela, (255, 0, 0), (LARGURA // 2 - 45, ALTURA // 2 - 60), 8)
-            pygame.draw.circle(self.tela, (255, 0, 0), (LARGURA // 2 + 45, ALTURA // 2 - 60), 8)
-            pygame.draw.ellipse(self.tela, (255, 255, 255), (LARGURA // 2 - 35, ALTURA // 2 + 10, 70, 65))
+            self.pg.draw.circle(self.tela, (0, 0, 0), (LARGURA // 2, ALTURA // 2 - 30), 135)
+            self.pg.draw.circle(self.tela, (255, 255, 255), (LARGURA // 2 - 45, ALTURA // 2 - 60), 22)
+            self.pg.draw.circle(self.tela, (255, 255, 255), (LARGURA // 2 + 45, ALTURA // 2 - 60), 22)
+            self.pg.draw.circle(self.tela, (255, 0, 0), (LARGURA // 2 - 45, ALTURA // 2 - 60), 8)
+            self.pg.draw.circle(self.tela, (255, 0, 0), (LARGURA // 2 + 45, ALTURA // 2 - 60), 8)
+            self.pg.draw.ellipse(self.tela, (255, 255, 255), (LARGURA // 2 - 35, ALTURA // 2 + 10, 70, 65))
 
         t1 = self.fonte_grande.render(self.motivo_gameover, True, (255, 255, 255))
         t2 = self.fonte_hud.render("Aperte [R] para reiniciar ou [ESC] para sair", True, (220, 220, 220))
@@ -1236,13 +1239,13 @@ class JogoStreaming3D:
             if self.animacao_soco > 0:
                 self.animacao_soco = max(0.0, self.animacao_soco - dt)
 
-            for evento in pygame.event.get():
-                if evento.type == pygame.QUIT:
-                    pygame.quit()
+            for evento in self.pg.event.get():
+                if evento.type == self.pg.QUIT:
+                    self.pg.quit()
                     sys.exit()
 
                 # Clique nos CÍRCULOS VERMELHOS do Hater quando a janela está aberta
-                if evento.type == pygame.MOUSEBUTTONDOWN and evento.button == 1:
+                if evento.type == self.pg.MOUSEBUTTONDOWN and evento.button == 1:
                     if self.estado == "JANELA" and self.hater_na_janela:
                         mx, my = evento.pos
                         ax, ay = self.alvo_hater_pos
@@ -1260,17 +1263,17 @@ class JogoStreaming3D:
                             else:
                                 self.gerar_novo_alvo_hater()
 
-                if evento.type == pygame.KEYDOWN:
+                if evento.type == self.pg.KEYDOWN:
                     # 1. Digitando fala dentro do PC
                     if self.estado == "NO_PC" and self.digitando_fala:
-                        if evento.key == pygame.K_RETURN:
+                        if evento.key == self.pg.K_RETURN:
                             self.processar_acao_live("FALAR", self.texto_digitado)
                             self.digitando_fala = False
                             self.texto_digitado = ""
-                        elif evento.key == pygame.K_ESCAPE:
+                        elif evento.key == self.pg.K_ESCAPE:
                             self.digitando_fala = False
                             self.texto_digitado = ""
-                        elif evento.key == pygame.K_BACKSPACE:
+                        elif evento.key == self.pg.K_BACKSPACE:
                             self.texto_digitado = self.texto_digitado[:-1]
                         else:
                             if len(self.texto_digitado) < 50 and evento.unicode.isprintable():
@@ -1279,9 +1282,9 @@ class JogoStreaming3D:
 
                     # 2. Menu de decisão do Computador
                     if self.estado == "MENU_PC":
-                        if evento.key == pygame.K_ESCAPE:
+                        if evento.key == self.pg.K_ESCAPE:
                             self.estado = "QUARTO_3D"
-                        elif evento.key == pygame.K_1:
+                        elif evento.key == self.pg.K_1:
                             if self.pc_ligado:
                                 if not self.em_live:
                                     self.iniciar_nova_live()
@@ -1291,41 +1294,41 @@ class JogoStreaming3D:
                                 self.tempo_silencio_total = 0.0
                                 self.mostrar_aviso_rapido("💻 Você ligou o PC de volta!", 2.0)
                                 self.estado = "QUARTO_3D"
-                        elif evento.key == pygame.K_2 and self.pc_ligado:
+                        elif evento.key == self.pg.K_2 and self.pc_ligado:
                             self.pc_ligado = False
                             self.tempo_silencio_total = 0.0
                             self.mostrar_aviso_rapido("🔌 PC desligado! Apague a lanterna [F] também por 5s!", 3.0)
                             self.estado = "QUARTO_3D"
                         continue
 
-                    if evento.key == pygame.K_ESCAPE:
-                        pygame.quit()
+                    if evento.key == self.pg.K_ESCAPE:
+                        self.pg.quit()
                         sys.exit()
 
                     # 3. Ações dentro da Transmissão (PC Ligado)
                     if self.estado == "NO_PC":
-                        if evento.key == pygame.K_1:
+                        if evento.key == self.pg.K_1:
                             self.digitando_fala = True
                             self.texto_digitado = ""
-                        elif evento.key == pygame.K_2:
+                        elif evento.key == self.pg.K_2:
                             self.processar_acao_live("JOGADA")
-                        elif evento.key == pygame.K_3:
+                        elif evento.key == self.pg.K_3:
                             self.processar_acao_live("SILENCIO")
-                        elif evento.key == pygame.K_4:
+                        elif evento.key == self.pg.K_4:
                             self.estado = "QUARTO_3D"
                             self.adicionar_mensagem_chat("AnaClara_BR", "ué onde ele foi? kkk", (180, 180, 255))
-                        elif evento.key == pygame.K_5:
+                        elif evento.key == self.pg.K_5:
                             self.encerrar_live()
 
                     # 4. Interações e Lanterna no Quarto 3D
                     elif self.estado == "QUARTO_3D":
-                        if evento.key == pygame.K_f:
+                        if evento.key == self.pg.K_f:
                             if self.bateria > 0:
                                 self.lanterna_ligada = not self.lanterna_ligada
                             else:
                                 self.lanterna_ligada = False
 
-                        elif evento.key == pygame.K_e:
+                        elif evento.key == self.pg.K_e:
                             alvo = self.verificar_interacao_proxima()
                             if alvo == "PC":
                                 self.estado = "MENU_PC"
@@ -1345,33 +1348,33 @@ class JogoStreaming3D:
 
                     # 5. Debaixo da Cama (apagar lanterna com F ou sair com E)
                     elif self.estado == "DEBAIXO_CAMA":
-                        if evento.key == pygame.K_f:
+                        if evento.key == self.pg.K_f:
                             if self.bateria > 0:
                                 self.lanterna_ligada = not self.lanterna_ligada
-                        elif evento.key == pygame.K_e:
+                        elif evento.key == self.pg.K_e:
                             self.estado = "QUARTO_3D"
                             self.tempo_debaixo_cama = 0.0
 
                     # 6. Na Janela Aberta (fechar janela)
                     elif self.estado == "JANELA":
-                        if evento.key == pygame.K_e:
+                        if evento.key == self.pg.K_e:
                             self.janela_aberta = False
                             self.estado = "QUARTO_3D"
 
                     # 7. Sair do Olho Mágico
                     elif self.estado == "OLHO_MAGICO":
-                        if evento.key == pygame.K_e:
+                        if evento.key == self.pg.K_e:
                             self.estado = "QUARTO_3D"
                             self.tempo_encarando = 0.0
 
                     # 8. Sair do Relatório
                     elif self.estado == "RELATORIO":
-                        if evento.key in (pygame.K_RETURN, pygame.K_e):
+                        if evento.key in (self.pg.K_RETURN, self.pg.K_e):
                             self.estado = "QUARTO_3D"
 
                     # 9. Reiniciar na Vitória ou Game Over
                     elif self.estado in ("GAME_OVER", "VITORIA"):
-                        if evento.key == pygame.K_r:
+                        if evento.key == self.pg.K_r:
                             self.__init__(self.nome_canal)
 
             # Avança o relógio da noite (12 minutos = 720s até 06:00 AM)
@@ -1406,11 +1409,10 @@ class JogoStreaming3D:
                 else:
                     self.tempo_silencio_total = 0.0
 
-                # Se não desligou o PC e a lanterna a tempo, ela BATE NA PORTA E ENTRA NO QUARTO!
                 if self.mae_na_porta and time.time() > self.tempo_limite_mae_porta:
                     self.mae_na_porta = False
                     self.mae_no_quarto = True
-                    self.tempo_limite_esconder = time.time() + 7.5  # 7.5s para correr e entrar debaixo da cama!
+                    self.tempo_limite_esconder = time.time() + 7.5
                     self.mostrar_aviso_rapido("🚪 *TOC TOC!* SUA MÃE ENTROU! ESCONDA-SE DEBAIXO DA CAMA [E]!", 4.0)
 
             # Lógica da Mãe Fase 2 (Dentro do Quarto): Ficar debaixo da cama por 5s
@@ -1503,10 +1505,13 @@ class JogoStreaming3D:
             elif self.estado == "GAME_OVER":
                 self.desenhar_gameover()
 
-            pygame.display.flip()
+            self.pg.display.flip()
 
 
 if __name__ == "__main__":
-    canal_logado = sistema_login_terminal()
-    jogo = JogoStreaming3D(canal_logado)
-    jogo.executar()
+    if len(sys.argv) >= 3 and sys.argv[1] == "--jogar":
+        jogo = JogoStreaming3D(sys.argv[2])
+        jogo.executar()
+    else:
+        print("Acesse no navegador: http://127.0.0.1:5000")
+        app.run(debug=True)

@@ -1,0 +1,197 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+body {
+    background: radial-gradient(circle at center, #141b2d 0%, #090c14 100%);
+    color: #f1f5f9;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+}
+
+.container {
+    background: #111827;
+    border: 2px solid #00d8ff;
+    border-radius: 14px;
+    padding: 35px;
+    width: 100%;
+    max-width: 480px;
+    box-shadow: 0 0 25px rgba(0, 216, 255, 0.2);
+}
+
+.badge-sa {
+    background: rgba(0, 216, 255, 0.15);
+    color: #00d8ff;
+    font-size: 12px;
+    font-weight: bold;
+    padding: 4px 10px;
+    border-radius: 20px;
+    display: inline-block;
+    margin-bottom: 10px;
+}
+
+h1 {
+    font-size: 26px;
+    color: #ffffff;
+    margin-bottom: 6px;
+}
+
+.subtitulo {
+    color: #94a3b8;
+    font-size: 14px;
+    margin-bottom: 22px;
+}
+
+.oculto {
+    display: none;
+}
+
+.alerta {
+    padding: 10px 14px;
+    border-radius: 6px;
+    font-size: 13px;
+    margin-bottom: 16px;
+}
+
+.alerta.erro {
+    background: rgba(239, 68, 68, 0.2);
+    border-left: 4px solid #ef4444;
+    color: #fca5a5;
+}
+
+.alerta.sucesso {
+    background: rgba(34, 197, 94, 0.2);
+    border-left: 4px solid #22c55e;
+    color: #86efac;
+}
+
+label {
+    display: block;
+    font-size: 13px;
+    color: #cbd5e1;
+    margin-bottom: 6px;
+}
+
+input {
+    width: 100%;
+    padding: 12px;
+    margin-bottom: 16px;
+    border-radius: 8px;
+    border: 1px solid #334155;
+    background: #0f172a;
+    color: #ffffff;
+    outline: none;
+}
+
+input:focus {
+    border-color: #00d8ff;
+}
+
+.botoes {
+    display: flex;
+    gap: 10px;
+}
+
+button {
+    padding: 12px;
+    border: none;
+    border-radius: 8px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: 0.2s;
+}
+
+.btn-primario {
+    flex: 1;
+    background: #00d8ff;
+    color: #090c14;
+}
+
+.btn-primario:hover {
+    background: #38e2ff;
+}
+
+.btn-secundario {
+    flex: 1;
+    background: #1e293b;
+    color: #e2e8f0;
+    border: 1px solid #334155;
+}
+
+.btn-secundario:hover {
+    background: #334155;
+}
+
+.info-canal {
+    background: #0f172a;
+    border: 1px solid #1e293b;
+    padding: 12px 16px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 18px;
+}
+
+.dot {
+    width: 10px;
+    height: 10px;
+    background: #ef4444;
+    border-radius: 50%;
+    box-shadow: 0 0 8px #ef4444;
+}
+
+.btn-jogar {
+    width: 100%;
+    background: #22c55e;
+    color: #052e16;
+    font-size: 17px;
+    padding: 15px;
+    margin-bottom: 20px;
+    box-shadow: 0 0 18px rgba(34, 197, 94, 0.3);
+}
+
+.btn-jogar:hover {
+    background: #4ade80;
+}
+
+.regras {
+    background: #0f172a;
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 16px;
+}
+
+.regras h3 {
+    color: #00d8ff;
+    font-size: 15px;
+    margin-bottom: 10px;
+}
+
+.regras ul {
+    list-style: none;
+    font-size: 13px;
+    color: #cbd5e1;
+    line-height: 1.6;
+}
+
+.regras li {
+    margin-bottom: 6px;
+}
+
+.btn-link {
+    width: 100%;
+    background: transparent;
+    color: #94a3b8;
+    font-size: 13px;
+}
+
+.btn-link:hover {
+    color: #ffffff;
+}

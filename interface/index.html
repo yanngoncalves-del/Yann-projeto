@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SA - Streaming Horror 3D</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <div class="container">
+        <span class="badge-sa">SITUAÇÃO DE APRENDIZAGEM (SA)</span>
+        <h1>Streaming Horror 3D</h1>
+        <p class="subtitulo">Sobreviva à madrugada de live das 00:00 AM até as 06:00 AM.</p>
+
+        <!-- MENSAGEM DE ERRO OU SUCESSO -->
+        {% if mensagem %}
+            <div class="alerta {{ tipo_msg }}">{{ mensagem }}</div>
+        {% endif %}
+
+        {% if not canal %}
+        <!-- TELA 1: LOGIN E CADASTRO (SEM JS, FORMULÁRIO DIRETO) -->
+        <form method="POST" action="/">
+            <label for="email">E-mail do Streamer</label>
+            <input type="email" id="email" name="email" placeholder="seuemail@exemplo.com" required>
+
+            <label for="senha">Senha (mínimo 4 dígitos)</label>
+            <input type="password" id="senha" name="senha" placeholder="••••" required>
+
+            <div class="botoes">
+                <button type="submit" name="acao" value="login" class="btn-primario">Entrar</button>
+                <button type="submit" name="acao" value="cadastro" class="btn-secundario">Cadastrar</button>
+            </div>
+        </form>
+        {% else %}
+        <!-- TELA 2: PAINEL APÓS O LOGIN -->
+        <div class="info-canal">
+            <span class="dot"></span>
+            <span>Canal conectado: <strong>{{ canal }}</strong></span>
+        </div>
+
+        <form method="POST" action="/jogar">
+            <input type="hidden" name="canal" value="{{ canal }}">
+            <button type="submit" class="btn-jogar">▶ INICIAR JOGO 3D</button>
+        </form>
+
+        <div class="regras">
+            <h3>Guia Rápido de Sobrevivência</h3>
+            <ul>
+                <li><strong>🚪 Sombra na Porta:</strong> Olhe pelo olho mágico (<b>E</b>) por 5 segundos.</li>
+                <li><strong>👻 Fantasma Silencioso:</strong> Saia do PC e ilumine ele com a lanterna (<b>F</b>).</li>
+                <li><strong>👩 Mãe & Cama:</strong> Desligue o PC (<b>E</b>) e a lanterna (<b>F</b>). Se ela entrar, esconda-se debaixo da cama (<b>E</b>).</li>
+                <li><strong>🪟 Hater na Janela:</strong> Abra a janela (<b>E</b>) e clique nos círculos vermelhos.</li>
+            </ul>
+        </div>
+
+        <a href="/" class="btn-link" style="display:block; text-align:center; text-decoration:none; margin-top:10px;">Sair da conta</a>
+        {% endif %}
+    </div>
+</body>
+</html>
